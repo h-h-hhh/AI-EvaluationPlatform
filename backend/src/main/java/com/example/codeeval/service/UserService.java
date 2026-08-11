@@ -48,12 +48,15 @@ public class UserService implements UserDetailsService {
             throw new IllegalArgumentException("邮箱已被注册");
         }
 
+        // 安全约束：公开注册接口仅允许注册 STUDENT 角色
+        // TEACHER/ADMIN 角色必须由管理员通过后台管理接口创建，防止权限提升漏洞
+        // 即使客户端绕过前端传入其他角色，此处也会强制覆盖为 STUDENT
         User user = User.builder()
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .email(request.getEmail())
                 .name(request.getName())
-                .role(User.Role.valueOf(request.getRole().toUpperCase()))
+                .role(User.Role.STUDENT)
                 .enabled(true)
                 .build();
 
@@ -77,7 +80,7 @@ public class UserService implements UserDetailsService {
         return LoginResponse.builder()
                 .accessToken(token)
                 .tokenType("Bearer")
-                .expiresIn(86400000L)
+                .expiresIn(3600000L)
                 .user(UserDTO.fromEntity(user))
                 .build();
     }

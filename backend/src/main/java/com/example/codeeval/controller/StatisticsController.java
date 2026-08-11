@@ -1,5 +1,6 @@
 package com.example.codeeval.controller;
 
+import com.example.codeeval.dto.ApiResponse;
 import com.example.codeeval.entity.User;
 import com.example.codeeval.repository.*;
 import org.springframework.http.ResponseEntity;
@@ -32,9 +33,9 @@ public class StatisticsController {
     }
 
     @GetMapping("/overview")
-    public ResponseEntity<Map<String, Object>> getOverview() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getOverview() {
         Map<String, Object> result = new HashMap<>();
-        
+
         long totalUsers = userRepository.count();
         long teachers = userRepository.countByRole(User.Role.TEACHER);
         long students = userRepository.countByRole(User.Role.STUDENT);
@@ -43,10 +44,10 @@ public class StatisticsController {
         long assignments = assignmentRepository.count();
         long submissions = submissionRepository.count();
         long evaluations = evaluationRepository.count();
-        
-        double avgScore = evaluationRepository.count() > 0 
-                ? evaluationRepository.averageScore() : 0;
-        
+
+        Double avgScore = evaluationRepository.count() > 0
+                ? evaluationRepository.averageScore() : 0.0;
+
         result.put("totalUsers", totalUsers);
         result.put("teachers", teachers);
         result.put("students", students);
@@ -55,50 +56,52 @@ public class StatisticsController {
         result.put("assignments", assignments);
         result.put("submissions", submissions);
         result.put("evaluations", evaluations);
-        result.put("avgScore", Math.round(avgScore));
-        
-        return ResponseEntity.ok(result);
+        result.put("avgScore", avgScore != null ? Math.round(avgScore) : 0);
+
+        return ResponseEntity.ok(ApiResponse.success("查询成功", result));
     }
 
     @GetMapping("/user-role-distribution")
-    public ResponseEntity<Map<String, Object>> getUserRoleDistribution() {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getUserRoleDistribution() {
         Map<String, Object> result = new HashMap<>();
-        
+
         long admins = userRepository.countByRole(User.Role.ADMIN);
         long teachers = userRepository.countByRole(User.Role.TEACHER);
         long students = userRepository.countByRole(User.Role.STUDENT);
         long total = admins + teachers + students;
-        
+
         result.put("admin", admins);
         result.put("teacher", teachers);
         result.put("student", students);
         result.put("total", total);
-        
-        return ResponseEntity.ok(result);
+
+        return ResponseEntity.ok(ApiResponse.success("查询成功", result));
     }
 
     @GetMapping("/course-submissions")
-    public ResponseEntity<List<Map<String, Object>>> getCourseSubmissions() {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getCourseSubmissions() {
         List<Object[]> results = submissionRepository.countByCourse();
-        
-        return ResponseEntity.ok(results.stream().map(row -> {
+
+        List<Map<String, Object>> data = results.stream().map(row -> {
             Map<String, Object> map = new HashMap<>();
             map.put("courseName", row[0]);
             map.put("submissions", row[1]);
             return map;
-        }).toList());
+        }).toList();
+
+        return ResponseEntity.ok(ApiResponse.success("查询成功", data));
     }
 
     @GetMapping("/recent-users")
-    public ResponseEntity<List<Map<String, Object>>> getRecentUsers() {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getRecentUsers() {
         List<User> users = userRepository.findAll();
         users.sort((u1, u2) -> {
             if (u1.getId() == null || u2.getId() == null) return 0;
             return Long.compare(u2.getId(), u1.getId());
         });
         users = users.stream().limit(10).toList();
-        
-        return ResponseEntity.ok(users.stream().map(user -> {
+
+        List<Map<String, Object>> data = users.stream().map(user -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", user.getId());
             map.put("username", user.getUsername());
@@ -108,12 +111,14 @@ public class StatisticsController {
             map.put("createdAt", "");
             map.put("active", user.getEnabled());
             return map;
-        }).toList());
+        }).toList();
+
+        return ResponseEntity.ok(ApiResponse.success("查询成功", data));
     }
 
     @GetMapping("/course-list")
-    public ResponseEntity<List<Map<String, Object>>> getCourseList() {
-        return ResponseEntity.ok(courseRepository.findAll().stream().map(course -> {
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getCourseList() {
+        List<Map<String, Object>> data = courseRepository.findAll().stream().map(course -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", course.getId());
             map.put("name", course.getName());
@@ -122,6 +127,8 @@ public class StatisticsController {
             map.put("teacherId", course.getTeacher() != null ? course.getTeacher().getId() : null);
             map.put("active", course.getActive());
             return map;
-        }).toList());
+        }).toList();
+
+        return ResponseEntity.ok(ApiResponse.success("查询成功", data));
     }
 }
