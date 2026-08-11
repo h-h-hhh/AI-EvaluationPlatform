@@ -41,6 +41,31 @@ public class UserService implements UserDetailsService {
     }
 
     public UserDTO register(RegisterRequest request) {
+        // 公开注册入口：系统已改为仅管理员创建账号，此处作为兜底仍强制 STUDENT
+        return createUserInternal(request, User.Role.STUDENT, false);
+    }
+
+    /**
+     * 管理员后台创建用户入口：允许指定任意角色（STUDENT / TEACHER / ADMIN）
+     * 与公开注册 register() 分离，两条独立业务链路，避免互相污染权限策略
+     */
+    public UserDTO createUserByAdmin(RegisterRequest request) {
+        User.Role targetRole;
+        try {
+            targetRole = User.Role.valueOf(request.getRole().toUpperCase());
+        } catch (Exception e) {
+            throw new IllegalArgumentException("无效的角色: " + request.getRole());
+        }
+        return createUserInternal(request, targetRole, true);
+    }
+
+    /**
+     * 创建用户的内部公共方法
+     * @param request 用户信息
+     * @param forcedRole 若不为 null，则强制使用此角色（忽略 request 中的 role）
+     * @param allowCustomRole true=管理员创建(允许自定义角色)，false=公开注册(强制 STUDENT)
+     */
+    private UserDTO createUserInternal(RegisterRequest request, User.Role forcedRole, boolean allowCustomRole) {
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new IllegalArgumentException("用户名已存在");
         }
@@ -48,15 +73,21 @@ public class UserService implements UserDetailsService {
             throw new IllegalArgumentException("邮箱已被注册");
         }
 
-        // 安全约束：公开注册接口仅允许注册 STUDENT 角色
-        // TEACHER/ADMIN 角色必须由管理员通过后台管理接口创建，防止权限提升漏洞
-        // 即使客户端绕过前端传入其他角色，此处也会强制覆盖为 STUDENT
+        User.Role role;
+        if (allowCustomRole && forcedRole != null) {
+            // 管理员创建：使用传入的角色（已在上层校验）
+            role = forcedRole;
+        } else {
+            // 公开注册：无论客户端传什么，都强制 STUDENT
+            role = User.Role.STUDENT;
+        }
+
         User user = User.builder()
                 .username(request.getUsername())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .email(request.getEmail())
                 .name(request.getName())
-                .role(User.Role.STUDENT)
+                .role(role)
                 .enabled(true)
                 .build();
 

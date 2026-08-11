@@ -112,6 +112,8 @@ public class CourseService {
     public List<Course> getEnrolledCourses(Long studentId) {
         List<CourseEnrollment> enrollments = enrollmentRepository.findByStudentId(studentId);
         return enrollments.stream()
+                // 只取有效（未退课）的选课记录，避免退课后仍出现在已选列表
+                .filter(e -> Boolean.TRUE.equals(e.getActive()))
                 .map(CourseEnrollment::getCourse)
                 .filter(Course::getActive)
                 .collect(Collectors.toList());
@@ -154,8 +156,10 @@ public class CourseService {
 
     public List<Course> getAvailableCourses(Long studentId) {
         List<Course> allCourses = courseRepository.findByActiveTrue();
+        // 仅统计 active=true 的选课记录；退课后（active=false）的课程需要重新出现在可选列表中
         List<Long> enrolledCourseIds = enrollmentRepository.findByStudentId(studentId)
                 .stream()
+                .filter(e -> Boolean.TRUE.equals(e.getActive()))
                 .map(e -> e.getCourse().getId())
                 .collect(Collectors.toList());
         

@@ -44,14 +44,16 @@ public class AdminController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<UserDTO>> createUser(@RequestBody Map<String, Object> request) {
+        // 管理员后台创建用户：允许指定 STUDENT / TEACHER / ADMIN 任意角色
+        // 与公开注册使用两条独立的业务链路（createUserByAdmin vs register）
         RegisterRequest registerRequest = new RegisterRequest();
         registerRequest.setUsername((String) request.get("username"));
         registerRequest.setName((String) request.get("name"));
         registerRequest.setEmail((String) request.get("email"));
         registerRequest.setPassword((String) request.get("password"));
         registerRequest.setRole((String) request.get("role"));
-        
-        UserDTO user = userService.register(registerRequest);
+
+        UserDTO user = userService.createUserByAdmin(registerRequest);
         return ResponseEntity.ok(ApiResponse.success("创建成功", user));
     }
 

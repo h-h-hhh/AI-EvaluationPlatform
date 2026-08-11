@@ -14,11 +14,13 @@ public class CourseEnrollment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    // 使用 EAGER 加载，避免 Jackson 序列化时 Hibernate 代理无法初始化导致 ByteBuddyInterceptor 错误
+    // 同时符合项目约束：关联字段使用 EAGER 加载以保证序列化正常
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "course_id", nullable = false)
     private Course course;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "student_id", nullable = false)
     private User student;
 

@@ -44,8 +44,9 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<UserDTO>> register(@Valid @RequestBody RegisterRequest request) {
-        UserDTO user = userService.register(request);
-        return ResponseEntity.ok(ApiResponse.success("注册成功", user));
+        // 业务规则：本系统不开放公开注册，所有账号由管理员后台统一创建和分配
+        // 保留该 endpoint 是为了返回明确的业务提示，避免前端收到 404/403 等不友好的错误
+        throw new IllegalArgumentException("本系统已关闭公开注册，请联系管理员为您创建账号");
     }
 
     @PostMapping("/login")
