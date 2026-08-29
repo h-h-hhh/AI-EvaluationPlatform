@@ -39,7 +39,49 @@ public class DeepSeekAnalysisService {
             return analyzeCode(code, context);
         }
 
-        String systemPrompt = """
+        try {
+            String response = deepSeekClient.chat(buildSystemPrompt(), buildUserPrompt(code, context));
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, Object> result = mapper.readValue(response, Map.class);
+
+            Map<String, Integer> scores = calculateScoresFromDeepSeek(result);
+            result.put("scores", scores);
+            return result;
+        } catch (Exception e) {
+            // 宽松模式（供 AnalysisController 的即席分析接口使用）：
+            // LLM 调用失败时降级为本地启发式分析，保证接口始终有返回
+            return analyzeCode(code, context);
+        }
+    }
+
+    /**
+     * Phase 3 新增：严格模式的 DeepSeek 代码分析（供评价链路使用）
+     *
+     * 与 analyzeCodeWithDeepSeek 的区别：
+     * - LLM 调用失败（超时 / HTTP 错误 / JSON 解析失败）时不做本地降级，
+     *   而是向上抛出 RuntimeException，由 EvaluationService 捕获后把评价任务
+     *   标记为 FAILED 并记录 errorMessage，让前端能明确感知失败并重试
+     * - 这样避免了"LLM 挂了但用户看到的是本地启发式分数"的静默错评问题
+     *
+     * @throws RuntimeException DeepSeek 调用或结果解析失败时抛出
+     */
+    public Map<String, Object> analyzeCodeStrict(String code, Map<String, Object> context) {
+        try {
+            String response = deepSeekClient.chat(buildSystemPrompt(), buildUserPrompt(code, context));
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            Map<String, Object> result = mapper.readValue(response, Map.class);
+
+            Map<String, Integer> scores = calculateScoresFromDeepSeek(result);
+            result.put("scores", scores);
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException("DeepSeek 代码分析失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 系统提示词：5 维评分模型 + 严格 JSON 输出格式（宽松/严格模式共用） */
+    private String buildSystemPrompt() {
+        return """
             你是一个专业的代码评审专家，专门分析Java代码质量。请按照以下维度分析代码：
 
             分析维度：
@@ -60,8 +102,11 @@ public class DeepSeekAnalysisService {
               "suggestions": ["建议1", "建议2", "建议3", "建议4", "建议5"]
             }
             """;
+    }
 
-        String userPrompt = String.format("""
+    /** 用户提示词：待分析代码 + 作业上下文（宽松/严格模式共用） */
+    private String buildUserPrompt(String code, Map<String, Object> context) {
+        return String.format("""
             请分析以下Java代码：
 
             【代码内容】
@@ -72,18 +117,6 @@ public class DeepSeekAnalysisService {
 
             请严格按照JSON格式输出分析结果。
             """, code, context);
-
-        try {
-            String response = deepSeekClient.chat(systemPrompt, userPrompt);
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            Map<String, Object> result = mapper.readValue(response, Map.class);
-
-            Map<String, Integer> scores = calculateScoresFromDeepSeek(result);
-            result.put("scores", scores);
-            return result;
-        } catch (Exception e) {
-            return analyzeCode(code, context);
-        }
     }
 
     private Map<String, Object> analyzeBasicMetrics(String code) {
@@ -305,6 +338,13 @@ public class DeepSeekAnalysisService {
 
         int originality = estimateOriginality(basicMetrics, structure);
         scores.put("originality", originality);
+
+        // Phase 3：本地模式补齐 performance / security 两个维度，
+        // 保证与 DeepSeek 5 维模型结构一致（EvaluationService 统一按 5 维加权算总分）
+        // - performance：本地静态分析无法测真实性能，用结构分近似（结构越清晰越利于性能优化）
+        // - security：本地静态分析无法可靠检测安全漏洞，给中性偏保守的默认分
+        scores.put("performance", Math.min(quality, 100));
+        scores.put("security", 80);
 
         scores.put("process", 80);
 

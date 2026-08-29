@@ -1,6 +1,7 @@
 package com.example.codeeval.controller;
 
 import com.example.codeeval.dto.ApiResponse;
+import com.example.codeeval.dto.EvaluationResultDTO;
 import com.example.codeeval.dto.EvaluationStatusDTO;
 import com.example.codeeval.entity.EvaluationResult;
 import com.example.codeeval.service.EvaluationService;
@@ -15,6 +16,9 @@ import java.util.List;
  * Phase 1 变更：评价触发接口从"同步阻塞等待"改为"异步受理 + 轮询"模式
  * - POST /api/evaluations/{submissionId}：秒级受理，返回任务状态（HTTP 202）
  * - GET  /api/evaluations/status/{submissionId}：前端轮询评价进度
+ *
+ * Phase 3 变更：查询接口统一返回 EvaluationResultDTO（不再返回实体），
+ * 彻底规避 EvaluationResult.submission LAZY 关联的序列化风险
  */
 @RestController
 @RequestMapping("/api/evaluations")
@@ -69,29 +73,29 @@ public class EvaluationController {
         return ResponseEntity.ok(ApiResponse.success("查询成功", status));
     }
 
-    // ==================== 查询接口（保持原有功能不变） ====================
+    // ==================== 查询接口（Phase 3：统一返回 DTO） ====================
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<EvaluationResult>> getEvaluationById(@PathVariable Long id) {
-        EvaluationResult evaluation = evaluationService.getEvaluationById(id);
+    public ResponseEntity<ApiResponse<EvaluationResultDTO>> getEvaluationById(@PathVariable Long id) {
+        EvaluationResultDTO evaluation = evaluationService.getEvaluationById(id);
         return ResponseEntity.ok(ApiResponse.success("查询成功", evaluation));
     }
 
     @GetMapping("/submission/{submissionId}")
-    public ResponseEntity<ApiResponse<EvaluationResult>> getEvaluationBySubmission(@PathVariable Long submissionId) {
-        EvaluationResult evaluation = evaluationService.getEvaluationBySubmission(submissionId);
+    public ResponseEntity<ApiResponse<EvaluationResultDTO>> getEvaluationBySubmission(@PathVariable Long submissionId) {
+        EvaluationResultDTO evaluation = evaluationService.getEvaluationBySubmission(submissionId);
         return ResponseEntity.ok(ApiResponse.success("查询成功", evaluation));
     }
 
     @GetMapping("/assignment/{assignmentId}")
-    public ResponseEntity<ApiResponse<List<EvaluationResult>>> getEvaluationsByAssignment(@PathVariable Long assignmentId) {
-        List<EvaluationResult> evaluations = evaluationService.getEvaluationsByAssignment(assignmentId);
+    public ResponseEntity<ApiResponse<List<EvaluationResultDTO>>> getEvaluationsByAssignment(@PathVariable Long assignmentId) {
+        List<EvaluationResultDTO> evaluations = evaluationService.getEvaluationsByAssignment(assignmentId);
         return ResponseEntity.ok(ApiResponse.success("查询成功", evaluations));
     }
 
     @GetMapping("/student/{studentId}")
-    public ResponseEntity<ApiResponse<List<EvaluationResult>>> getEvaluationsByStudent(@PathVariable Long studentId) {
-        List<EvaluationResult> evaluations = evaluationService.getEvaluationsByStudent(studentId);
+    public ResponseEntity<ApiResponse<List<EvaluationResultDTO>>> getEvaluationsByStudent(@PathVariable Long studentId) {
+        List<EvaluationResultDTO> evaluations = evaluationService.getEvaluationsByStudent(studentId);
         return ResponseEntity.ok(ApiResponse.success("查询成功", evaluations));
     }
 }

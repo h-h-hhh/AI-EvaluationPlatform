@@ -35,7 +35,8 @@ llm:
   model: deepseek-coder
   temperature: 0.2
   max-tokens: 4000
-  timeout: 60000
+  # Phase 3：与 application.yml 保持一致，LLM 响应超时 120s
+  timeout: 120000
 
 logging:
   level:

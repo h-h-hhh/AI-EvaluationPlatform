@@ -54,4 +54,6 @@ llm:
   model: deepseek-coder
   temperature: 0.2
   max-tokens: 4000
-  timeout: 60000
+  # Phase 3：LLM 响应超时（毫秒）。DeepSeek 代码分析实际耗时常见 10~120s，
+  # 原 60s 偏紧，调整为 120s；该值由 DeepSeekClient 的 WebClient responseTimeout 读取
+  timeout: 120000
