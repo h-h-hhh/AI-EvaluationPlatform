@@ -165,7 +165,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { statisticsApi } from '../../services/api'
+import { statisticsApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -201,20 +201,19 @@ const loadData = async () => {
       statisticsApi.getCourseSubmissions()
     ])
     
-    if (overviewResult) {
-      stats.value = overviewResult
-      stats.value.admins = overviewResult.admins || 0
+    if (overviewResult && overviewResult.success && overviewResult.data) {
+      stats.value = overviewResult.data
     }
     
-    if (roleResult) {
-      stats.value.admins = roleResult.admin || 0
-      stats.value.teachers = roleResult.teacher || 0
-      stats.value.students = roleResult.student || 0
-      stats.value.totalUsers = roleResult.total || 0
+    if (roleResult && roleResult.success && roleResult.data) {
+      stats.value.admins = roleResult.data.admin || 0
+      stats.value.teachers = roleResult.data.teacher || 0
+      stats.value.students = roleResult.data.student || 0
+      stats.value.totalUsers = roleResult.data.total || 0
     }
     
-    if (courseResult) {
-      courseStats.value = courseResult.map(item => ({
+    if (courseResult && courseResult.success && courseResult.data) {
+      courseStats.value = courseResult.data.map(item => ({
         name: item.courseName,
         submissions: item.submissions
       }))
@@ -244,7 +243,12 @@ const maxDaily = computed(() => {
   return Math.max(...dailyStats.value.map(d => d.submissions))
 })
 
-const logout = () => {
+const logout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

@@ -54,6 +54,8 @@ const onSubmit = async () => {
     const response = await axios.post('/api/auth/login', {
       username: username.value,
       password: password.value
+    }, {
+      withCredentials: true
     })
 
     if (response.data.success) {

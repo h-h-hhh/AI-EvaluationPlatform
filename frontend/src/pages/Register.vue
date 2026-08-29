@@ -21,11 +21,9 @@
           <el-input v-model="registerForm.name" placeholder="请输入姓名" />
         </el-form-item>
         
-        <el-form-item label="角色" prop="role">
-          <el-select v-model="registerForm.role" placeholder="请选择角色">
-            <el-option label="学生" value="STUDENT" />
-            <el-option label="教师" value="TEACHER" />
-          </el-select>
+        <!-- 角色固定为 STUDENT，公开注册不允许选择 TEACHER/ADMIN，这两类账号必须由管理员后台创建 -->
+        <el-form-item label="角色">
+          <el-input model-value="学生" disabled />
         </el-form-item>
         
         <el-form-item>

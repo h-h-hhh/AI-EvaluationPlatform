@@ -104,7 +104,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { courseApi, statisticsApi } from '../../services/api'
+import { courseApi, statisticsApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -130,7 +130,7 @@ const courses = ref([])
 const loadCourses = async () => {
   try {
     const result = await courseApi.getAll()
-    if (result && result.data) {
+    if (result && result.success && result.data) {
       courses.value = result.data.map(course => ({
         ...course,
         teacher: course.teacher?.name || '未知教师',
@@ -147,8 +147,8 @@ const loadCourses = async () => {
 const loadTeachers = async () => {
   try {
     const result = await statisticsApi.getRecentUsers()
-    if (result) {
-      teachers.value = result
+    if (result && result.success && result.data) {
+      teachers.value = result.data
         .filter(user => user.role === 'TEACHER')
         .map(user => ({ id: user.id, name: user.name }))
     }
@@ -262,7 +262,12 @@ const saveCourse = async () => {
   }
 }
 
-const logout = () => {
+const logout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

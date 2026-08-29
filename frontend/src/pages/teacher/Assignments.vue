@@ -302,7 +302,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { assignmentApi, courseApi } from '../../services/api'
+import { assignmentApi, courseApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -319,7 +319,7 @@ const assignments = ref([])
 const loadCourses = async () => {
   try {
     const response = await courseApi.getAll()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       courses.value = response.data.map(c => ({ id: c.id, name: c.name }))
     }
   } catch (error) {
@@ -330,7 +330,7 @@ const loadCourses = async () => {
 const loadAssignments = async () => {
   try {
     const response = await assignmentApi.getAll()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       assignments.value = response.data.map(a => ({
         id: a.id,
         title: a.title,
@@ -388,7 +388,12 @@ const filteredAssignments = computed(() => {
   return assignments.value.filter(a => a.courseId === parseInt(selectedCourse.value))
 })
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

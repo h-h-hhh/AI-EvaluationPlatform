@@ -2,8 +2,23 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 10000,
+  withCredentials: true
 })
+
+let isRefreshing = false
+let failedQueue = []
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(prom => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+  failedQueue = []
+}
 
 api.interceptors.request.use(
   config => {
@@ -22,20 +37,59 @@ api.interceptors.response.use(
   response => {
     return response.data
   },
-  error => {
-    if (error.response && error.response.status === 401) {
-      sessionStorage.removeItem('token')
-      sessionStorage.removeItem('role')
-      sessionStorage.removeItem('user')
-      window.location.href = '/'
+  async error => {
+    const originalRequest = error.config
+
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        }).then(token => {
+          originalRequest.headers.Authorization = `Bearer ${token}`
+          return api(originalRequest)
+        }).catch(err => {
+          return Promise.reject(err)
+        })
+      }
+
+      originalRequest._retry = true
+      isRefreshing = true
+
+      try {
+        const refreshResponse = await axios.post('/api/auth/refresh', {}, { withCredentials: true })
+        const newToken = refreshResponse.data.data.accessToken
+        
+        sessionStorage.setItem('token', newToken)
+        sessionStorage.setItem('role', refreshResponse.data.data.user.role)
+        sessionStorage.setItem('user', JSON.stringify(refreshResponse.data.data.user))
+
+        processQueue(null, newToken)
+
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        return api(originalRequest)
+      } catch (refreshError) {
+        processQueue(refreshError, null)
+        
+        sessionStorage.removeItem('token')
+        sessionStorage.removeItem('role')
+        sessionStorage.removeItem('user')
+        window.location.href = '/'
+        
+        return Promise.reject(refreshError)
+      } finally {
+        isRefreshing = false
+      }
     }
+
     return Promise.reject(error)
   }
 )
 
 export const authApi = {
   login: (data) => api.post('/auth/login', data),
-  register: (data) => api.post('/auth/register', data)
+  register: (data) => api.post('/auth/register', data),
+  refresh: () => axios.post('/api/auth/refresh', {}, { withCredentials: true }),
+  logout: () => api.post('/auth/logout')
 }
 
 export const courseApi = {
@@ -73,13 +127,25 @@ export const evaluationApi = {
   getBySubmission: (submissionId) => api.get(`/evaluations/submission/${submissionId}`),
   getByAssignment: (assignmentId) => api.get(`/evaluations/assignment/${assignmentId}`),
   getByStudent: (studentId) => api.get(`/evaluations/student/${studentId}`),
-  evaluate: (submissionId) => api.post(`/evaluations/${submissionId}`)
+  // 受理评价（异步）：后端秒级返回 202 + 任务状态，不再阻塞等待 LLM 完成；
+  // timeout 显式放宽到 15s，作为极端情况下的保险（默认 10s 通常已足够）
+  evaluate: (submissionId) => api.post(`/evaluations/${submissionId}`, null, { timeout: 15000 }),
+  // 轮询评价状态：轻量短请求，使用全局默认 10s 超时
+  getStatus: (submissionId) => api.get(`/evaluations/status/${submissionId}`)
 }
 
 export const gitApi = {
   validateUrl: (data) => api.post('/git/validate', data),
   getSubmissionHistory: (studentId, assignmentId) => api.get(`/git/submission-history?studentId=${studentId}&assignmentId=${assignmentId}`),
   getRepositoryAnalysis: (assignmentId) => api.get(`/git/repository-analysis?assignmentId=${assignmentId}`)
+}
+
+export const analysisApi = {
+  analyzeCode: (data) => api.post('/analyze/code', data),
+  analyzeCodeWithDeepSeek: (data) => api.post('/analyze/code-with-deepseek', data),
+  batchAnalyze: (data) => api.post('/analyze/batch', data),
+  analyzeQuality: (data) => api.post('/quality/analyze', data),
+  fullEvaluation: (data) => api.post('/evaluate/full', data)
 }
 
 export const userApi = {

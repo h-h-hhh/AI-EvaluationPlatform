@@ -157,7 +157,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { userApi } from '../../services/api'
+import { userApi, authApi } from '../../services/api'
 
 const router = useRouter()
 const route = useRoute()
@@ -181,7 +181,7 @@ const users = ref([])
 const loadUsers = async () => {
   try {
     const result = await userApi.getAll()
-    if (result && result.data) {
+    if (result && result.success && result.data) {
       users.value = result.data
     }
   } catch (error) {
@@ -289,7 +289,12 @@ const closeModal = () => {
   }
 }
 
-const logout = () => {
+const logout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

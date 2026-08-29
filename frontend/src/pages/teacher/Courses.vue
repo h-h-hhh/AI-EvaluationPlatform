@@ -93,7 +93,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { courseApi } from '../../services/api'
+import { courseApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -134,7 +134,12 @@ onMounted(() => {
   loadCourses()
 })
 
-const logout = () => {
+const logout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

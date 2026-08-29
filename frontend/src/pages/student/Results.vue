@@ -195,7 +195,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { submissionApi, courseApi } from '../../services/api'
+import { submissionApi, courseApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -210,7 +210,7 @@ const results = ref([])
 const loadCourses = async () => {
   try {
     const response = await courseApi.getEnrolled()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       courses.value = response.data.map(c => ({ id: c.id, name: c.name }))
     }
   } catch (error) {
@@ -221,7 +221,7 @@ const loadCourses = async () => {
 const loadResults = async () => {
   try {
     const response = await submissionApi.getByStudent()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       results.value = response.data.map(r => {
         const evaluation = r.evaluation || {}
         const scores = evaluation.scores || {
@@ -403,7 +403,12 @@ const highestScore = computed(() => {
   return Math.max(...evaluated.map(r => r.finalScore))
 })
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

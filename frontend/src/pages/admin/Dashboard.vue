@@ -122,7 +122,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { statisticsApi } from '../../services/api'
+import { statisticsApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -154,12 +154,12 @@ const loadData = async () => {
       statisticsApi.getRecentUsers()
     ])
     
-    if (overviewResult) {
-      stats.value = overviewResult
+    if (overviewResult && overviewResult.success && overviewResult.data) {
+      stats.value = overviewResult.data
     }
     
-    if (usersResult) {
-      recentUsers.value = usersResult.slice(0, 4)
+    if (usersResult && usersResult.success && usersResult.data) {
+      recentUsers.value = usersResult.data.slice(0, 4)
     }
   } catch (error) {
     console.error('加载统计数据失败:', error)
@@ -184,7 +184,12 @@ const editUser = (user) => {
   router.push({ path: '/admin/users', query: { edit: user.id } })
 }
 
-const logout = () => {
+const logout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

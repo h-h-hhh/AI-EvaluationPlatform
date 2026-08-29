@@ -166,6 +166,7 @@
               <tr>
                 <th>学生</th>
                 <th>Git提交</th>
+                <th>评价状态</th>
                 <th>正确性</th>
                 <th>代码质量</th>
                 <th>原创性</th>
@@ -186,6 +187,12 @@
                 <td>
                   <span :class="student.gitSubmitted ? 'status-success' : 'status-warning'">
                     {{ student.gitSubmitted ? '已提交' : '未提交' }}
+                  </span>
+                </td>
+                <!-- Phase 2 新增：评价任务状态徽标（与后端 PENDING/PROCESSING/COMPLETED/FAILED 对应） -->
+                <td>
+                  <span class="eval-status" :class="'eval-status-' + (student.evaluationStatus || 'none').toLowerCase()">
+                    {{ getStatusText(student.evaluationStatus) }}
                   </span>
                 </td>
                 <td>
@@ -221,6 +228,22 @@
                 <td>
                   <button class="action-btn" @click="viewDetail(student)">详情</button>
                   <button class="action-btn" @click="addFeedback(student)">反馈</button>
+                  <!-- Phase 2 新增：FAILED 记录的重试入口；进行中任务展示禁用态防重复触发 -->
+                  <button
+                    v-if="student.evaluationStatus === 'FAILED'"
+                    class="action-btn retry-btn"
+                    :disabled="retryingId === student.id"
+                    @click="reevaluate(student)"
+                  >
+                    {{ retryingId === student.id ? '重试中…' : '重新评价' }}
+                  </button>
+                  <button
+                    v-else-if="student.evaluationStatus === 'PENDING' || student.evaluationStatus === 'PROCESSING'"
+                    class="action-btn"
+                    disabled
+                  >
+                    评价中…
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -261,9 +284,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { courseApi, assignmentApi, evaluationApi, statisticsApi } from '../../services/api'
+import { ElMessage } from 'element-plus'
+import { courseApi, assignmentApi, evaluationApi, statisticsApi, authApi } from '../../services/api'
+import { useEvaluationPolling } from '../../composables/useEvaluationPolling'
 
 const router = useRouter()
 
@@ -310,6 +335,107 @@ const riskStudents = computed(() => {
   return students.value.filter(s => s.aiRisk !== 'low')
 })
 
+// ==================== Phase 2：评价状态反馈 ====================
+// 轮询参数与学生页一致：3s 起步、1.5 倍退避（上限 5s）、最多 60 次判定超时
+const { start: startPolling } = useEvaluationPolling({
+  interval: 3000,
+  maxInterval: 5000,
+  maxAttempts: 60
+})
+
+// 当前正在重新评价的学生记录ID（驱动按钮 loading，防重复触发）
+const retryingId = ref(null)
+
+// 状态文本映射：与后端 EvaluationResult.status 常量保持一致
+const getStatusText = (status) => ({
+  PENDING: '排队中',
+  PROCESSING: '评价中',
+  COMPLETED: '已完成',
+  FAILED: '失败'
+}[status] || '待评价')
+
+/**
+ * 加载选中作业的真实评价列表
+ * TODO(Phase 3): 后端该接口当前返回 LAZY 关联实体，直接序列化存在风险；
+ * 待后端改为返回 DTO 后此功能完全生效。接口报错时保留占位数据并提示。
+ */
+const loadEvaluationStatus = async () => {
+  if (!selectedAssignment.value) return
+  try {
+    const res = await evaluationApi.getByAssignment(selectedAssignment.value)
+    if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+      students.value = res.data.map(e => ({
+        id: e.id,
+        // 注意：后端 submission 为 LAZY 关联，DTO 化之前此字段可能为 null（重试按钮会给出提示）
+        submissionId: e.submission?.id ?? null,
+        name: e.submission?.student?.name || `提交 #${e.id}`,
+        correctnessScore: e.correctnessScore ?? 0,
+        qualityScore: e.qualityScore ?? 0,
+        originalityScore: e.originalityScore ?? 0,
+        processScore: e.processScore ?? 0,
+        totalScore: e.finalScore ?? 0,
+        // 评价任务状态：驱动"状态"列徽标与重试按钮展示
+        evaluationStatus: e.status || 'COMPLETED',
+        evaluationError: e.errorMessage || '',
+        gitSubmitted: true,
+        aiRisk: 'low',
+        aiRiskReason: '',
+        codeFeatures: ''
+      }))
+    }
+  } catch (error) {
+    console.error('加载评价列表失败:', error)
+    ElMessage.error('加载评价数据失败，请稍后重试')
+  }
+}
+
+// 切换"作业"下拉框时刷新评价列表
+watch(selectedAssignment, () => {
+  loadEvaluationStatus()
+})
+
+/**
+ * FAILED 记录的重新评价入口：
+ * 受理接口对 FAILED 记录会重置为 PENDING 重新执行（后端幂等逻辑），
+ * 前端随后轮询状态直到 COMPLETED/FAILED
+ */
+const reevaluate = async (student) => {
+  if (!student.submissionId) {
+    ElMessage.error('缺少提交记录ID，无法重新评价')
+    return
+  }
+  // 同一时刻只允许一个重新评价任务（轮询 composable 为单实例）
+  if (retryingId.value) return
+
+  retryingId.value = student.id
+  student.evaluationStatus = 'PENDING'
+  try {
+    await evaluationApi.evaluate(student.submissionId)
+    startPolling(student.submissionId, {
+      onUpdate: (data) => {
+        student.evaluationStatus = data.status
+      },
+      onCompleted: (data) => {
+        student.evaluationStatus = 'COMPLETED'
+        student.totalScore = data.finalScore ?? student.totalScore
+        ElMessage.success(`学生 ${student.name} 评价完成`)
+        retryingId.value = null
+      },
+      onFailed: (msg) => {
+        student.evaluationStatus = 'FAILED'
+        student.evaluationError = msg
+        ElMessage.error(`学生 ${student.name} 重新评价失败：${msg}`)
+        retryingId.value = null
+      }
+    })
+  } catch (error) {
+    console.error('发起重新评价失败:', error)
+    student.evaluationStatus = 'FAILED'
+    ElMessage.error('发起重新评价失败，请稍后重试')
+    retryingId.value = null
+  }
+}
+
 const loadData = async () => {
   try {
     const [coursesResult, assignmentsResult, statsResult] = await Promise.all([
@@ -318,13 +444,13 @@ const loadData = async () => {
       statisticsApi.getOverview()
     ])
     
-    if (coursesResult.data) {
+    if (coursesResult && coursesResult.success && coursesResult.data) {
       courses.value = coursesResult.data.map(c => ({ id: c.id, name: c.name }))
     }
-    if (assignmentsResult.data) {
+    if (assignmentsResult && assignmentsResult.success && assignmentsResult.data) {
       assignments.value = assignmentsResult.data.map(a => ({ id: a.id, title: a.title }))
     }
-    if (statsResult.data) {
+    if (statsResult && statsResult.success && statsResult.data) {
       classStats.value = {
         submissionRate: 0,
         avgScore: statsResult.data.avgScore || 0,
@@ -334,7 +460,7 @@ const loadData = async () => {
     }
     
     students.value = [
-      { id: 1, name: '暂无学生数据', correctnessScore: 0, qualityScore: 0, originalityScore: 0, processScore: 0, totalScore: 0, gitSubmitted: false, aiRisk: 'low', aiRiskReason: '', codeFeatures: '' }
+      { id: 1, name: '暂无学生数据', correctnessScore: 0, qualityScore: 0, originalityScore: 0, processScore: 0, totalScore: 0, gitSubmitted: false, aiRisk: 'low', aiRiskReason: '', codeFeatures: '', submissionId: null, evaluationStatus: null, evaluationError: '' }
     ]
   } catch (error) {
     console.error('加载评价数据失败:', error)
@@ -345,7 +471,12 @@ onMounted(() => {
   loadData()
 })
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')
@@ -736,6 +867,38 @@ const contactStudent = (student) => {
   background: #f5f5f5;
   border-color: #409eff;
   color: #409eff;
+}
+
+/* ===== Phase 2：评价状态徽标 ===== */
+.eval-status {
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* 各状态配色：排队=黄、评价中=蓝、完成=绿、失败=红、未发起=灰 */
+.eval-status-pending { background: #fef3c7; color: #d97706; }
+.eval-status-processing { background: #dbeafe; color: #2563eb; }
+.eval-status-completed { background: #dcfce7; color: #16a34a; }
+.eval-status-failed { background: #fee2e2; color: #dc2626; }
+.eval-status-none { background: #f3f4f6; color: #9ca3af; }
+
+/* 重试按钮：红色描边强调"需要处理"，禁用态降低透明度 */
+.retry-btn {
+  border-color: #f56c6c;
+  color: #f56c6c;
+}
+
+.retry-btn:hover {
+  background: #fef0f0;
+  border-color: #f56c6c;
+  color: #f56c6c;
+}
+
+.retry-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* AI风险 */

@@ -110,7 +110,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { courseApi, assignmentApi } from '../../services/api'
+import { courseApi, assignmentApi, authApi } from '../../services/api'
 
 const router = useRouter()
 
@@ -138,12 +138,12 @@ const loadData = async () => {
       assignmentApi.getAll()
     ])
     
-    if (coursesResult) {
-      stats.value.courses = coursesResult.length
+    if (coursesResult && coursesResult.success && coursesResult.data) {
+      stats.value.courses = coursesResult.data.length
     }
-    if (assignmentsResult) {
-      stats.value.assignments = assignmentsResult.length
-      recentAssignments.value = assignmentsResult.slice(0, 4).map(a => ({
+    if (assignmentsResult && assignmentsResult.success && assignmentsResult.data) {
+      stats.value.assignments = assignmentsResult.data.length
+      recentAssignments.value = assignmentsResult.data.slice(0, 4).map(a => ({
         id: a.id,
         title: a.title,
         course: a.course?.name || '',
@@ -160,7 +160,12 @@ onMounted(() => {
   loadData()
 })
 
-const logout = () => {
+const logout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

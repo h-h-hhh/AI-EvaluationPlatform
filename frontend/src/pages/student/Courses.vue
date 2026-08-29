@@ -114,7 +114,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { courseApi, assignmentApi, evaluationApi } from '../../services/api'
+import { courseApi, assignmentApi, evaluationApi, authApi } from '../../services/api'
 
 const router = useRouter()
 const activeTab = ref('enrolled')
@@ -126,7 +126,7 @@ const evaluations = ref([])
 const loadEnrolledCourses = async () => {
   try {
     const response = await courseApi.getEnrolled()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       enrolledCourses.value = response.data.map(c => ({
         id: c.id,
         name: c.name,
@@ -143,7 +143,7 @@ const loadEnrolledCourses = async () => {
 const loadAvailableCourses = async () => {
   try {
     const response = await courseApi.getAvailable()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       availableCourses.value = response.data.map(c => ({
         id: c.id,
         name: c.name,
@@ -160,7 +160,7 @@ const loadAvailableCourses = async () => {
 const loadAssignments = async () => {
   try {
     const response = await assignmentApi.getAll()
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       assignments.value = response.data
     }
   } catch (error) {
@@ -171,7 +171,7 @@ const loadAssignments = async () => {
 const loadEvaluations = async () => {
   try {
     const response = await evaluationApi.getByStudent(0)
-    if (response.success && response.data) {
+    if (response && response.success && response.data) {
       evaluations.value = response.data
     }
   } catch (error) {
@@ -186,7 +186,12 @@ onMounted(() => {
   loadEvaluations()
 })
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  try {
+    await authApi.logout()
+  } catch (e) {
+    console.error(e)
+  }
   sessionStorage.removeItem('token')
   sessionStorage.removeItem('role')
   sessionStorage.removeItem('user')

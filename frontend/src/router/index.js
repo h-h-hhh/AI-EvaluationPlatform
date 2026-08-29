@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import axios from 'axios'
 
 const routes = [
   {
@@ -6,10 +7,10 @@ const routes = [
     name: 'Login',
     component: () => import('../pages/Login.vue')
   },
+  // 本系统关闭公开注册，所有账号由管理员后台创建；/register 路径自动跳回登录页
   {
     path: '/register',
-    name: 'Register',
-    component: () => import('../pages/Register.vue')
+    redirect: '/'
   },
   {
     path: '/admin',
@@ -90,16 +91,38 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const token = sessionStorage.getItem('token')
   const userRole = sessionStorage.getItem('role')
 
   if (to.meta.requiresAuth) {
-    if (!token) {
-      window.location.href = '/'
-      return
-    }
-    if (!userRole) {
+    if (!token || !userRole) {
+      try {
+        const refreshResponse = await axios.post('/api/auth/refresh', {}, { withCredentials: true })
+        if (refreshResponse.data.success) {
+          const { accessToken, user } = refreshResponse.data.data
+          sessionStorage.setItem('token', accessToken)
+          sessionStorage.setItem('role', user.role)
+          sessionStorage.setItem('user', JSON.stringify(user))
+          
+          if (to.meta.role && user.role !== to.meta.role) {
+            let targetPath = '/'
+            if (user.role === 'ADMIN') {
+              targetPath = '/admin'
+            } else if (user.role === 'TEACHER') {
+              targetPath = '/teacher'
+            } else if (user.role === 'STUDENT') {
+              targetPath = '/student'
+            }
+            window.location.href = targetPath
+            return
+          }
+          next()
+          return
+        }
+      } catch (refreshError) {
+        console.log('Refresh token expired or invalid')
+      }
       window.location.href = '/'
       return
     }
