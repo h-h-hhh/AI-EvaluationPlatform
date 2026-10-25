@@ -1,0 +1,24 @@
+{
+  "name": "codeeval-frontend",
+  "version": "1.0.0",
+  "description": "基于LLM+Git的代码作业智慧评价平台-前端",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "axios": "^1.6.7",
+    "echarts": "^5.6.0",
+    "element-plus": "^2.6.1",
+    "vue": "^3.4.21",
+    "vue-router": "^4.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "sass": "^1.71.1",
+    "vite": "^5.1.6"
+  }
+}

@@ -1,0 +1,63 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:codeeval;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+
+  sql:
+    init:
+      mode: never
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    # Phase 4 日志优化：关闭逐条 SQL 打印（原先与 Security DEBUG 一起
+    # 每秒产生数千行日志，把评价任务等关键业务日志从终端缓冲中淹没）
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: 3600000
+  refresh-expiration: 604800000
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    # Phase 4 日志优化：业务包保留 DEBUG 便于排查评价链路，
+    # Security 降为 INFO（原先每次请求打印十几行过滤器链 DEBUG，
+    # 与 SQL 日志一起淹没关键业务日志）
+    com.example.codeeval: DEBUG
+    org.springframework.security: INFO
+
+llm:
+  provider: deepseek
+  api-key: ${DEEPSEEK_API_KEY:}
+  base-url: https://api.deepseek.com/v1
+  model: deepseek-coder
+  temperature: 0.2
+  max-tokens: 4000
+  # Phase 3：LLM 响应超时（毫秒）。DeepSeek 代码分析实际耗时常见 10~120s，
+  # 原 60s 偏紧，调整为 120s；该值由 DeepSeekClient 的 WebClient responseTimeout 读取
+  timeout: 120000
